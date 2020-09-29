@@ -1,0 +1,206 @@
+---
+title: "Assignment 2"
+date: "`r format(Sys.Date(), '%B %d, %Y')`"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = F, message = F)
+```
+
+```{r loading libraries}
+library(tidyverse)
+library(sf)
+library(tigris)
+library(leaflet)
+library(censusapi)
+library(devtools)
+library(tidycensus)
+
+Sys.setenv(CENSUS_KEY="c8aa67e4086b4b5ce3a8717f59faa9a28f611dab")
+census_api_key("c8aa67e4086b4b5ce3a8717f59faa9a28f611dab", install = TRUE, overwrite = TRUE)
+
+
+acs_vars_2018_5yr <-
+  listCensusMetadata(
+    name = "2018/acs/acs5",
+    type = "variables"
+  )
+saveRDS(acs_vars_2018_5yr, "acs_vars_2018_5yr.rds")
+```
+
+
+PART 1
+```{r}
+census_race_labels <- 
+  c(
+    "White Alone",
+    "Black or African American",
+    "American Indian and Alaska Native Alone",
+    "Asian Alone",
+    "Native Hawaiian and Other Pacific Islander Alone)",
+    "Some Other Race Alone",
+    "Two or More Races"
+  )
+```
+
+```{r}
+Alameda_county_education_race <-
+  1:7 %>% 
+  map_dfr(function(x){
+    getCensus(
+      name = "acs/acs5",
+      vintage = 2018,
+      region = "county:001",
+      regionin = "state:06",
+      vars = paste0("group(C15002",LETTERS[x],")")
+    ) %>%
+      select(!c(GEO_ID,state,NAME) & !ends_with(c("EA","MA","M"))) %>%
+      pivot_longer(
+        ends_with("E"),
+        names_to = "variable",
+        values_to = "estimate"
+      ) %>%
+      left_join(
+        acs_vars_2018_5yr %>% 
+          select(name, label), 
+        by = c("variable" = "name")
+      ) %>% 
+      select(-variable) %>% 
+      separate(
+        label,
+        into = c(NA,NA, "sex", "educational_attainment"),
+        sep = "!!"
+      ) %>% 
+      filter(!is.na(educational_attainment)) %>% 
+      mutate(race = census_race_labels[x])
+  })
+```
+
+
+```{r}
+Alameda_county_education_race %>% 
+  group_by(educational_attainment, race) %>% 
+  summarize(estimate = sum(estimate)) %>% 
+  ggplot() +
+  geom_bar(
+    aes(
+      x = educational_attainment %>% 
+        factor(levels =  Alameda_county_education_race$educational_attainment[1:4]),
+      y = estimate,
+      fill = race
+    ),
+    stat = "identity",
+    position = "stack",
+  ) +
+    theme(axis.text.x = element_text(angle = 45, hjust = 0.95))  + 
+  labs(
+    x = "Educational Attainment Level",
+    y = "Number of Individuals 25 Years or Older",
+    title = "Alameda County Educational Attainment by race",
+    fill = "Race of Individual"
+  ) 
+```
+
+
+```{r}
+Alameda_race_total <-
+  Alameda_county_education_race %>%
+  group_by(race) %>%
+  summarize(estimate = sum(estimate)) %>%
+  mutate(educational_attainment = "Total")
+
+Alameda_county_education_race %>%
+  group_by(educational_attainment, race) %>% 
+  summarize(estimate = sum(estimate)) %>% 
+  rbind(Alameda_race_total) %>% 
+  ggplot() +
+  geom_bar(
+    aes(
+      x = educational_attainment %>% 
+        factor(levels = c(Alameda_county_education_race$educational_attainment[1:4], "Total")),
+      y = estimate,
+      fill = race
+    ),
+    stat = "identity",
+    position = "fill"
+  ) +
+  labs(
+    x = "Educational Attainment Level",
+    y = "Proportion of Individuals 25 Years or Older",
+    title = "Alameda County Educational Attainment by race",
+    fill = "Race of Individuals"
+  ) +
+  coord_flip() +
+  theme(
+    legend.position = "bottom",
+    legend.direction = "vertical"
+  )
+
+```
+
+PART 2
+```{r}
+temp <- tempfile()
+download.file("https://www2.census.gov/programs-surveys/acs/data/pums/2018/5-Year/csv_hca.zip",destfile = temp, mode = "wb")
+
+pums_hca_2018_5yr <- read_csv(unzip(temp,"psam_h06.csv"))
+
+unlink(temp)
+```
+
+```{r}
+library(tidycensus)
+census_api_key("c8aa67e4086b4b5ce3a8717f59faa9a28f611dab", install = TRUE, overwrite = TRUE)
+readRenviron("~/.Renviron")
+
+pums_vars_2018 <- 
+  pums_variables %>%
+  filter(year == 2018, survey == "acs5")
+
+pums_vars_2018_distinct_hh <- 
+  pums_vars_2018 %>%
+  distinct(var_code, var_label, data_type, level) %>% 
+  filter(level == "person")
+```
+
+```{r}
+ca_pums_houshold <- get_pums(
+  variables = c(
+    "PUMA",
+    "NP",
+    "ACCESS"
+  ),
+  state = "CA",
+  survey = "acs5",
+  recode = T
+)
+```
+
+```{r}
+# grab household data on internet access - filter households with no access
+# grab person data on grade school attending
+#merge data based on SERIALNO
+```
+
+```{r}
+pums_vars_2018_distinct_individual <- 
+  pums_vars_2018 %>%
+  distinct(var_code, var_label, data_type, level) %>% 
+  filter(level == "person")
+```
+
+```{r}
+ca_pums_individual <- get_pums(
+  variables = c(
+    "PUMA",
+    "SCHG"
+  ),
+  state = "CA",
+  survey = "acs5",
+  recode = T
+)
+```
+
