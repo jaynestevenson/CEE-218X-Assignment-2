@@ -172,9 +172,9 @@ Alameda_county_education_race %>%
        sum()) * 100) %>%
     round()
 
-#Non-White Individuals only make up 52% of those with a "bachelor's degree or higher."
+#Non-White individuals make up only 52% of those with a "bachelor's degree or higher."
 ```
-This analysis indicates that there are disparities between races and educational attainment in Alameda County. More specifically, residents who are "White Alone" or "Asian Alone" are overrepresented in the highest educational attainment level and are underrepresented in the lower educational attainment levels. Conversely, residents who are  "Black of African American" or "Some Other Race Alone" are underrepresented in the highest educational attainment level and are overrepresented in the lower educational attainment levels, and this trend is especially true for those who are "Some Other Race Alone." While the overall population of Alameda County is 56% non-White, the subpopulation of individuals without a bachelor's degree or higher is 60% non-White. Moreover, non-White Individuals only make up 52% of those with a bachelor's degree or higher. This analysis shows that yes, there is disproportionate educational attainment by race in Alameda County.
+This analysis indicates that there are disparities between races and educational attainment in Alameda County (for individuals 25 years or older). More specifically, residents who are "White Alone" or "Asian Alone" are overrepresented in the highest educational attainment level and are underrepresented in the lower educational attainment levels. Conversely, residents who are  "Black of African American" or "Some Other Race Alone" are underrepresented in the highest educational attainment level and are overrepresented in the lower educational attainment levels. While the overall population of Alameda County is 56% non-White, the subpopulation of individuals without a bachelor's degree or higher is 60% non-White. Moreover, non-White Individuals make up only 52% of those with a bachelor's degree or higher. This analysis shows that yes, there is disproportionate educational attainment by race in Alameda County.
 
 
 PART 2
@@ -202,8 +202,8 @@ pums_vars_2018_distinct_hh <-
   filter(level == "housing")
 ```
 
-```{r}
-ca_pums_houshold <- get_pums(
+```{r, eval=F}
+ca_pums_household <- get_pums(
   variables = c(
     "PUMA",
     "NP",
@@ -212,7 +212,13 @@ ca_pums_houshold <- get_pums(
   state = "CA",
   survey = "acs5",
   recode = T
-)
+) 
+saveRDS(ca_pums_household, "ca_pums_household.rds")
+```
+
+```{r, echo=F}
+ca_pums_household <-
+readRDS("ca_pums_household.rds")
 ```
 
 ```{r}
@@ -222,7 +228,7 @@ pums_vars_2018_distinct_individual <-
   filter(level == "person")
 ```
 
-```{r}
+```{r, eval=F}
 ca_pums_individual <- get_pums(
   variables = c(
     "PUMA",
@@ -231,7 +237,13 @@ ca_pums_individual <- get_pums(
   state = "CA",
   survey = "acs5",
   recode = T
-)
+) 
+saveRDS(ca_pums_individual, "ca_pums_individual.rds")
+```
+
+```{r, echo=F}
+ca_pums_individual <-
+readRDS("ca_pums_individual.rds")
 ```
 
 
@@ -257,7 +269,7 @@ Alameda_pumas <-
   st_as_sf()
 
 Alameda_pums_household <-
-  ca_pums_houshold %>% 
+  ca_pums_household %>% 
   filter(PUMA %in% Alameda_pumas$PUMACE10, !duplicated(SERIALNO))
 
 Alameda_pums_individual <- 
@@ -297,7 +309,7 @@ student_internet <-
 One important assumption for this analysis is that this data reflects students' current 
 situation in Alameda County. Because this analysis is based on the ACA 2018 5-year data 
 set, the data doesn't capture changes from the past couple of years, most notably the affects of the COVID-19 pandemic on remote learning. This data set also doesn't provide
-direct insight into additional challenges involving remote learning and internet such as the quality of internet access. For example, with more people both working and learning from home, it seems likely that households with internet access could still experience additional internet constraints such as bandwidth issues, and these types of challenges are not reflected in this data set. Moreover, internet access is only valuable to students if they have a device, such as a laptop, to utilize for school work. So, access to an electronic device in addition to internet is another assumption made in this analysis. Despite these assumptions, this analysis still shows that distance learning is leaving students behind. And while the percentage of students grades K-12 without internet access is just over 5%, that's still upwards of 13,000 students who are facing additional challenges to remote learning because they lack internet access. These are challenging times for everyone, students and working adults alike, but these numbers emphasize that the challenges are not equal for everyone and we should ensure that students have every resource they need to be succcessful in a remote learning environment.
+direct insight into additional challenges with remote learning and internet such as the quality of internet access. For example, with more people both working and learning from home, it seems likely that households with internet access could still experience additional internet constraints such as bandwidth issues, and these types of challenges are not reflected in this data set. Moreover, internet access is only valuable to students if they have a device, such as a laptop, to utilize for school work. So, access to an electronic device in addition to internet is another assumption made in this analysis. Despite these assumptions, this analysis still shows that remote learning is leaving students behind. While the percentage of students grades K-12 without internet access is just over 5%, that's still upwards of 13,000 students who are facing additional challenges to remote learning because they lack internet access. These are challenging times for everyone, students and working adults alike, but these numbers emphasize that the challenges are not equal for everyone. We should ensure that students have every resource they need to be successful in a remote learning environment.
 
 
 PART 3
@@ -455,6 +467,6 @@ ac_migration_flow_19 <-
 
 ac_migration_flow_19
 ```
-The results of this migration analysis show that there is a positive external net flow for the highest education levels (bachelor’s degree or graduate/professional degree). Interestingly, there is also a positive net external flow for the lowest education level, people in the “less than high school graduate” category. There is a negative external net flow for those in the “high school graduate” or “some college or associate’s degree” category. This division among education levels points to an interesting trend: Overall, Alameda county is gaining college-educated residents and losing residents with lower education levels. The exception is represented by a positive external net flow of those in the “less than high school graduate” category, but the inflow of college-educated residents outweighs this significantly. Similarly, there is a large positive internal net flow in the “bachelor’s degree” and “graduate or professional degree” category. There is a negative internal net flow in all other categories, but the positive internal net flow dominates the trends. This analysis indicates that many residents already living in Alameda County are becoming more and more educated and thus leaving their old educational attainment categories.
+The results of this migration analysis show that there is a positive external net flow for the highest education levels (bachelor’s degree or graduate/professional degree). Interestingly, there is also a positive net external flow for the lowest education level, people in the “less than high school graduate” category. There is a negative external net flow for those in the “high school graduate” or “some college or associate’s degree” category. This division among education levels points to an interesting trend — Overall, Alameda county is gaining college-educated residents and losing residents with lower education levels. The exception is represented by a positive external net flow of those in the “less than high school graduate” category, but the inflow of college-educated residents outweighs this significantly. Similarly, there is a large positive internal net flow in the “bachelor’s degree” and “graduate or professional degree” category. There is a negative internal net flow in all other categories, but the positive internal net flow dominates the trends. This analysis indicates that many residents already living in Alameda County are becoming more educated and thus leaving their old educational attainment categories.
 
-Overall, this analysis shows that the residents of Alameda County have become increasingly educated. This poses the question, however, of what happens to those residents with lower education levels. While many people are increasing their education level internally, this analysis also shows that residents with lower education levels are also leaving the county. This indicates that there are potential negative repercussions of upward educational mobility on less educated residents that are driving them to leave, such as gentrification. 
+Overall, this analysis shows that the residents of Alameda County have become increasingly educated. This poses the question, however, of what happens to those residents with lower education levels. While many people are increasing their education level internally, this analysis also shows that residents with lower education levels are also leaving the county. This indicates that there are likely negative repercussions of upward educational mobility on less educated residents that are driving them to leave, such as gentrification. 
