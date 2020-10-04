@@ -20,8 +20,6 @@ library(devtools)
 library(tidycensus)
 
 Sys.setenv(CENSUS_KEY="c8aa67e4086b4b5ce3a8717f59faa9a28f611dab")
-census_api_key("c8aa67e4086b4b5ce3a8717f59faa9a28f611dab", install = TRUE, overwrite = TRUE)
-
 
 acs_vars_2018_5yr <-
   listCensusMetadata(
@@ -141,6 +139,44 @@ Alameda_county_education_race %>%
 
 ```
 
+```{r}
+((sum(Alameda_race_total$estimate[1:6])/sum(Alameda_race_total$estimate))*100) %>% round()
+
+#This shows that the overall population of Alameda County is 56% non-White.
+
+((Alameda_county_education_race %>%
+    filter(educational_attainment 
+           %in% Alameda_county_education_race$educational_attainment[1:3]) %>%
+    filter(race != "White Alone") %>%
+    pull(estimate) %>%
+    sum()) /
+    (Alameda_county_education_race %>%
+       filter(educational_attainment 
+              %in% Alameda_county_education_race$educational_attainment[1:3]) %>%
+       pull(estimate) %>%
+       sum()) * 100) %>%
+    round()
+
+# This indicates that the subpopulation of individuals with an education level lower than "bachelor's degree of higher" is 60% non-White. 
+
+((Alameda_county_education_race %>%
+    filter(educational_attainment 
+           %in% Alameda_county_education_race$educational_attainment[4]) %>%
+    filter(race != "White Alone") %>%
+    pull(estimate) %>%
+    sum()) /
+    (Alameda_county_education_race %>%
+       filter(educational_attainment 
+              %in% Alameda_county_education_race$educational_attainment[4]) %>%
+       pull(estimate) %>%
+       sum()) * 100) %>%
+    round()
+
+#Non-White Individuals only make up 52% of those with a "bachelor's degree or higher."
+```
+This analysis indicates that there are disparities between races and educational attainment in Alameda County. More specifically, residents who are "White Alone" or "Asian Alone" are overrepresented in the highest educational attainment level and are underrepresented in the lower educational attainment levels. Conversely, residents who are  "Black of African American" or "Some Other Race Alone" are underrepresented in the highest educational attainment level and are overrepresented in the lower educational attainment levels, and this trend is especially true for those who are "Some Other Race Alone." While the overall population of Alameda County is 56% non-White, the subpopulation of individuals without a bachelor's degree or higher is 60% non-White. Moreover, non-White Individuals only make up 52% of those with a bachelor's degree or higher. This analysis shows that yes, there is disproportionate educational attainment by race in Alameda County.
+
+
 PART 2
 ```{r}
 temp <- tempfile()
@@ -152,7 +188,7 @@ unlink(temp)
 ```
 
 ```{r}
-library(tidycensus)
+
 census_api_key("c8aa67e4086b4b5ce3a8717f59faa9a28f611dab", install = TRUE, overwrite = TRUE)
 readRenviron("~/.Renviron")
 
@@ -163,7 +199,7 @@ pums_vars_2018 <-
 pums_vars_2018_distinct_hh <- 
   pums_vars_2018 %>%
   distinct(var_code, var_label, data_type, level) %>% 
-  filter(level == "person")
+  filter(level == "housing")
 ```
 
 ```{r}
@@ -177,12 +213,6 @@ ca_pums_houshold <- get_pums(
   survey = "acs5",
   recode = T
 )
-```
-
-```{r}
-# grab household data on internet access - filter households with no access
-# grab person data on grade school attending
-#merge data based on SERIALNO
 ```
 
 ```{r}
@@ -204,3 +234,227 @@ ca_pums_individual <- get_pums(
 )
 ```
 
+
+```{r}
+ca_counties <- counties("CA", cb = T, progress_bar = F)
+
+Alameda_county <-
+  ca_counties %>%
+  filter(NAME == "Alameda")
+
+```
+
+```{r}
+ca_pumas <-
+  pumas("CA", cb = T, progress_bar = F)
+
+Alameda_pumas <-
+  ca_pumas %>% 
+  st_centroid() %>% 
+  .[Alameda_county, ] %>% 
+  st_set_geometry(NULL) %>% 
+  left_join(ca_pumas %>% select(GEOID10)) %>% 
+  st_as_sf()
+
+Alameda_pums_household <-
+  ca_pums_houshold %>% 
+  filter(PUMA %in% Alameda_pumas$PUMACE10, !duplicated(SERIALNO))
+
+Alameda_pums_individual <- 
+  ca_pums_individual %>%
+  filter(PUMA %in% Alameda_pumas$PUMACE10) %>%
+  mutate(SCHG = as.numeric(SCHG)) %>%
+  filter(SCHG %in% c(2:14)) 
+```
+
+
+```{r}
+merge_students_houses <- 
+  Alameda_pums_individual %>%
+  left_join(
+    Alameda_pums_household %>%
+      select(ACCESS, ACCESS_label, SERIALNO),
+    by = "SERIALNO"
+  )
+```
+
+```{r}
+student_internet <-
+  merge_students_houses %>%
+  mutate(
+  num_students_no_internet = ifelse(
+    (ACCESS == "3"),
+    WGTP,
+    0
+  )) %>%
+  summarize(
+    perc_students_no_internet =
+      sum(num_students_no_internet, na.rm = T)/sum(WGTP, na.rm = T) * 100,
+    total_student_no_internet =sum(num_students_no_internet, na.rm =T)
+  ) %>%
+  print(student_internet) #prints values in console
+```
+One important assumption for this analysis is that this data reflects students' current 
+situation in Alameda County. Because this analysis is based on the ACA 2018 5-year data 
+set, the data doesn't capture changes from the past couple of years, most notably the affects of the COVID-19 pandemic on remote learning. This data set also doesn't provide
+direct insight into additional challenges involving remote learning and internet such as the quality of internet access. For example, with more people both working and learning from home, it seems likely that households with internet access could still experience additional internet constraints such as bandwidth issues, and these types of challenges are not reflected in this data set. Moreover, internet access is only valuable to students if they have a device, such as a laptop, to utilize for school work. So, access to an electronic device in addition to internet is another assumption made in this analysis. Despite these assumptions, this analysis still shows that distance learning is leaving students behind. And while the percentage of students grades K-12 without internet access is just over 5%, that's still upwards of 13,000 students who are facing additional challenges to remote learning because they lack internet access. These are challenging times for everyone, students and working adults alike, but these numbers emphasize that the challenges are not equal for everyone and we should ensure that students have every resource they need to be succcessful in a remote learning environment.
+
+
+PART 3
+```{r}
+acs_vars_2019_1yr <-
+  listCensusMetadata(
+    name = "2019/acs/acs1",
+    type = "variables"
+  )
+
+```
+
+
+```{r}
+ac_mobility_current_19 <-
+    getCensus(
+    name = "acs/acs1",
+    vintage = 2019,
+    region = "county:001",
+    regionin = "state:06",
+    vars = c("group(B07009)")
+  ) %>% 
+  select(!c(GEO_ID,state,NAME) & !ends_with(c("EA","MA","M"))) %>%
+  pivot_longer(
+    ends_with("E"),
+    names_to = "variable",
+    values_to = "estimate"
+  ) %>%
+  left_join(
+    acs_vars_2019_1yr %>% 
+      select(name, label), 
+    by = c("variable" = "name")
+  ) %>% 
+  select(-variable) %>%
+  separate(
+    label, 
+    into=c(NA,NA,"mobility", "educational_attainment"),
+    sep= "!!"
+  ) %>%
+  mutate(
+    mobility = ifelse(
+      mobility %in% c("Same house 1 year ago:", "Moved within same county:"),
+      "Here since last year",
+      "Inflow"
+    )
+  ) %>%
+  filter(!is.na(educational_attainment)) %>%
+  group_by(mobility, educational_attainment) %>%
+  summarize(estimate = sum(estimate))
+```
+
+
+```{r}
+ac_mobility_lastyear_19 <- 
+  getCensus(
+    name = "acs/acs1",
+    vintage = 2019,
+    region = "county:001",
+    regionin = "state:06",
+    vars = c("group(B07409)")
+  ) %>% 
+  select(!c(GEO_ID,state,NAME) & !ends_with(c("EA","MA","M"))) %>%
+  pivot_longer(
+    ends_with("E"),
+    names_to = "variable",
+    values_to = "estimate"
+  ) %>%
+  left_join(
+    acs_vars_2019_1yr %>% 
+      select(name, label), 
+    by = c("variable" = "name")
+  ) %>% 
+  select(-variable) %>% 
+  separate(
+    label,
+    into = c(NA,NA,"mobility", "educational_attainment"),
+    sep = "!!"
+  ) %>% 
+  mutate(
+    mobility = ifelse(
+      mobility %in% c("Same house:", "Moved within same county:"),
+      "Here since last year",
+      "Outflow"
+    )
+  ) %>% 
+  filter(!is.na(educational_attainment)) %>%
+  group_by(mobility, educational_attainment) %>% 
+  summarize(estimate = sum(estimate))
+```
+
+```{r}
+ac_mobility_current_18 <- 
+  getCensus(
+    name = "acs/acs1",
+    vintage = 2018,
+    region = "county:001",
+    regionin = "state:06",
+    vars = c("group(B07009)")
+  ) %>% 
+  select(!c(GEO_ID,state,NAME) & !ends_with(c("EA","MA","M"))) %>%
+  pivot_longer(
+    ends_with("E"),
+    names_to = "variable",
+    values_to = "estimate"
+  ) %>%
+  left_join(
+    acs_vars_2019_1yr %>% 
+      select(name, label), 
+    by = c("variable" = "name")
+  ) %>% 
+  select(-variable) %>% 
+  separate(
+    label,
+    into = c(NA,NA,"mobility", "educational_attainment"),
+    sep = "!!"
+  ) %>% 
+  mutate(
+    mobility = "Here last year"
+  ) %>% 
+  filter(!is.na(educational_attainment)) %>%
+  group_by(mobility, educational_attainment) %>% 
+  summarize(estimate = sum(estimate))
+```
+
+```{r}
+ac_migration_flow_19 <-
+   rbind(
+    ac_mobility_current_18,
+    ac_mobility_lastyear_19 %>% 
+      filter(mobility == "Outflow"),
+    ac_mobility_current_19 %>% 
+      filter(mobility == "Inflow"),
+    ac_mobility_current_19 %>% 
+      group_by(educational_attainment) %>% 
+      summarize(estimate = sum(estimate)) %>% 
+      mutate(mobility = "Here this year")
+  ) %>% 
+  pivot_wider(
+    names_from = mobility,
+    values_from = estimate
+  ) %>% 
+  mutate(
+    `External net` = Inflow - Outflow,
+    `Internal net` = `Here this year` - `Here last year` - `External net`,
+  ) %>% 
+  select(
+    `Educational Attainment` = educational_attainment,
+    `Internal net`,
+    `External net`,
+    `Here last year`, 
+    `Here this year`, 
+    Outflow, 
+    Inflow
+  )
+
+ac_migration_flow_19
+```
+The results of this migration analysis show that there is a positive external net flow for the highest education levels (bachelor’s degree or graduate/professional degree). Interestingly, there is also a positive net external flow for the lowest education level, people in the “less than high school graduate” category. There is a negative external net flow for those in the “high school graduate” or “some college or associate’s degree” category. This division among education levels points to an interesting trend: Overall, Alameda county is gaining college-educated residents and losing residents with lower education levels. The exception is represented by a positive external net flow of those in the “less than high school graduate” category, but the inflow of college-educated residents outweighs this significantly. Similarly, there is a large positive internal net flow in the “bachelor’s degree” and “graduate or professional degree” category. There is a negative internal net flow in all other categories, but the positive internal net flow dominates the trends. This analysis indicates that many residents already living in Alameda County are becoming more and more educated and thus leaving their old educational attainment categories.
+
+Overall, this analysis shows that the residents of Alameda County have become increasingly educated. This poses the question, however, of what happens to those residents with lower education levels. While many people are increasing their education level internally, this analysis also shows that residents with lower education levels are also leaving the county. This indicates that there are potential negative repercussions of upward educational mobility on less educated residents that are driving them to leave, such as gentrification. 
