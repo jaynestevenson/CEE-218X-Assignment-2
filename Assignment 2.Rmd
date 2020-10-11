@@ -79,37 +79,39 @@ Alameda_county_education_race <-
 
 
 ```{r}
-Alameda_county_education_race %>% 
-  group_by(educational_attainment, race) %>% 
-  summarize(estimate = sum(estimate)) %>% 
-  ggplot() +
-  geom_bar(
-    aes(
-      x = educational_attainment %>% 
-        factor(levels =  Alameda_county_education_race$educational_attainment[1:4]),
-      y = estimate,
-      fill = race
-    ),
-    stat = "identity",
-    position = "stack",
-  ) +
-    theme(axis.text.x = element_text(angle = 45, hjust = 0.95))  + 
-  labs(
-    x = "Educational Attainment Level",
-    y = "Number of Individuals 25 Years or Older",
-    title = "Alameda County Educational Attainment by race",
-    fill = "Race of Individual"
-  ) 
-```
-
-
-```{r}
 Alameda_race_total <-
   Alameda_county_education_race %>%
   group_by(race) %>%
   summarize(estimate = sum(estimate)) %>%
   mutate(educational_attainment = "Total")
 
+
+Alameda_county_education_race %>% 
+  group_by(educational_attainment, race) %>% 
+  summarize(estimate = sum(estimate)) %>% 
+  rbind(Alameda_race_total) %>% 
+  ggplot() +
+  geom_bar(
+    aes(
+      x = educational_attainment %>% 
+        factor(levels = c(Alameda_county_education_race$educational_attainment[1:4], "Total")),
+      y = estimate,
+      fill = race
+    ),
+    stat = "identity",
+    position = "stack",
+  ) +
+  labs(
+    x = "Educational Attainment Level",
+    y = "Number of Individuals 25 Years or Older",
+    title = "Alameda County Educational Attainment by race",
+    fill = "Race of Individual"
+  ) +
+  coord_flip()
+```
+
+
+```{r}
 Alameda_county_education_race %>%
   group_by(educational_attainment, race) %>% 
   summarize(estimate = sum(estimate)) %>% 
@@ -196,32 +198,14 @@ pums_vars_2018 <-
   pums_variables %>%
   filter(year == 2018, survey == "acs5")
 
+```
+
+```{r, include = false}
 pums_vars_2018_distinct_hh <- 
   pums_vars_2018 %>%
   distinct(var_code, var_label, data_type, level) %>% 
-  filter(level == "housing")
-```
+  filter(level == "housing") 
 
-```{r, eval=F}
-ca_pums_household <- get_pums(
-  variables = c(
-    "PUMA",
-    "NP",
-    "ACCESS"
-  ),
-  state = "CA",
-  survey = "acs5",
-  recode = T
-) 
-saveRDS(ca_pums_household, "ca_pums_household.rds")
-```
-
-```{r, echo=F}
-ca_pums_household <-
-readRDS("ca_pums_household.rds")
-```
-
-```{r}
 pums_vars_2018_distinct_individual <- 
   pums_vars_2018 %>%
   distinct(var_code, var_label, data_type, level) %>% 
@@ -229,23 +213,25 @@ pums_vars_2018_distinct_individual <-
 ```
 
 ```{r, eval=F}
-ca_pums_individual <- get_pums(
+ca_pums <- get_pums(
   variables = c(
     "PUMA",
+    "NP",
+    "ACCESS",
     "SCHG"
   ),
   state = "CA",
-  survey = "acs5",
+  year = 2018,
+  survey = "acs1",
   recode = T
 ) 
-saveRDS(ca_pums_individual, "ca_pums_individual.rds")
+saveRDS(ca_pums, "ca_pums.rds")
 ```
 
 ```{r, echo=F}
-ca_pums_individual <-
-readRDS("ca_pums_individual.rds")
+ca_pums <-
+readRDS("ca_pums.rds")
 ```
-
 
 ```{r}
 ca_counties <- counties("CA", cb = T, progress_bar = F)
@@ -268,37 +254,25 @@ Alameda_pumas <-
   left_join(ca_pumas %>% select(GEOID10)) %>% 
   st_as_sf()
 
-Alameda_pums_household <-
-  ca_pums_household %>% 
-  filter(PUMA %in% Alameda_pumas$PUMACE10, !duplicated(SERIALNO))
-
-Alameda_pums_individual <- 
-  ca_pums_individual %>%
+Alameda_pums <-
+  ca_pums %>% 
   filter(PUMA %in% Alameda_pumas$PUMACE10) %>%
   mutate(SCHG = as.numeric(SCHG)) %>%
-  filter(SCHG %in% c(2:14)) 
-```
-
-
-```{r}
-merge_students_houses <- 
-  Alameda_pums_individual %>%
-  left_join(
-    Alameda_pums_household %>%
-      select(ACCESS, ACCESS_label, SERIALNO),
-    by = "SERIALNO"
-  )
-```
-
-```{r}
-student_internet <-
-  merge_students_houses %>%
+  filter(SCHG %in% c(2:14)) %>%
   mutate(
   num_students_no_internet = ifelse(
     (ACCESS == "3"),
     WGTP,
     0
-  )) %>%
+  ))
+
+
+```
+
+
+```{r}
+student_internet <-
+  Alameda_pums %>%
   summarize(
     perc_students_no_internet =
       sum(num_students_no_internet, na.rm = T)/sum(WGTP, na.rm = T) * 100,
@@ -306,10 +280,62 @@ student_internet <-
   ) %>%
   print(student_internet) #prints values in console
 ```
+
+
+```{r}
+grouped_by_puma <- 
+  Alameda_pums %>%
+  group_by(PUMA) %>%
+  summarize(
+    perc_students_no_internet =
+      sum(num_students_no_internet, na.rm = T)/sum(WGTP, na.rm = T) * 100,
+    total_student_no_internet =sum(num_students_no_internet, na.rm =T)
+  ) %>%
+  left_join(
+    Alameda_pumas %>% 
+      select(PUMACE10),
+    by = c("PUMA" = "PUMACE10")
+  ) %>% 
+  st_as_sf() 
+ 
+
+pums_pal <- colorNumeric(
+  palette = "Oranges",
+  domain = grouped_by_puma$perc_students_no_internet
+)
+
+leaflet() %>%
+  addTiles() %>% 
+  addPolygons(
+    data = grouped_by_puma %>%
+       st_transform(4326),
+    fillColor = ~pums_pal(perc_students_no_internet),
+    color = "white",
+    opacity = 0.5,
+    fillOpacity = 0.5,
+    weight = 1,
+    label = ~paste0(
+      round(perc_students_no_internet), 
+      "% of Students Grades K-12 Without Home Internet Access in ",
+      PUMA
+    ),
+    highlightOptions = highlightOptions(
+      weight = 2,
+      opacity = 1
+    )
+  ) %>% 
+  addLegend(
+    data = grouped_by_puma,
+    pal = pums_pal,
+    values = ~perc_students_no_internet,
+    title = "% of Students Grades K-12 <br> Without Home Internet Access"
+  )
+```
 One important assumption for this analysis is that this data reflects students' current 
-situation in Alameda County. Because this analysis is based on the ACA 2018 5-year data 
-set, the data doesn't capture changes from the past couple of years, most notably the affects of the COVID-19 pandemic on remote learning. This data set also doesn't provide
-direct insight into additional challenges with remote learning and internet such as the quality of internet access. For example, with more people both working and learning from home, it seems likely that households with internet access could still experience additional internet constraints such as bandwidth issues, and these types of challenges are not reflected in this data set. Moreover, internet access is only valuable to students if they have a device, such as a laptop, to utilize for school work. So, access to an electronic device in addition to internet is another assumption made in this analysis. Despite these assumptions, this analysis still shows that remote learning is leaving students behind. While the percentage of students grades K-12 without internet access is just over 5%, that's still upwards of 13,000 students who are facing additional challenges to remote learning because they lack internet access. These are challenging times for everyone, students and working adults alike, but these numbers emphasize that the challenges are not equal for everyone. We should ensure that students have every resource they need to be successful in a remote learning environment.
+situation in Alameda County. Because this analysis is based on the ACA 2019 1-year data 
+set, the data doesn't capture the affects of the COVID-19 pandemic on remote learning. This data set also doesn't provide direct insight into additional challenges with remote learning and internet such as the quality of internet access. For example, with more people both working and learning from home, it seems likely that households with internet access could still experience additional internet constraints such as bandwidth issues, and these types of challenges are not reflected in this data set. Moreover, internet access is only valuable to students if they have a device, such as a laptop, to utilize for school work. So, access to an electronic device in addition to internet is another assumption made in this analysis. 
+
+Despite these assumptions, this analysis still shows that remote learning is leaving students behind. While the percentage of students grades K-12 without internet access is just over 2%, that's still ~5,000 students who are facing additional challenges to remote learning because they lack internet access. These are challenging times for everyone, students and working adults alike, but these numbers emphasize that the challenges are not equal for everyone. This is especially the case for students living in PUMA 00104, where 12% of students grades K-12 lack home internet access. This is 6X the overall percentage for Alameda County, highlighting that students in particular PUMAS are serious struggling when it comes to remote learning.
 
 
 PART 3
@@ -463,10 +489,11 @@ ac_migration_flow_19 <-
     `Here this year`, 
     Outflow, 
     Inflow
-  )
-
+  ) 
+ 
+  
 ac_migration_flow_19
 ```
 The results of this migration analysis show that there is a positive external net flow for the highest education levels (bachelor’s degree or graduate/professional degree). Interestingly, there is also a positive net external flow for the lowest education level, people in the “less than high school graduate” category. There is a negative external net flow for those in the “high school graduate” or “some college or associate’s degree” category. This division among education levels points to an interesting trend — Overall, Alameda county is gaining college-educated residents and losing residents with lower education levels. The exception is represented by a positive external net flow of those in the “less than high school graduate” category, but the inflow of college-educated residents outweighs this significantly. Similarly, there is a large positive internal net flow in the “bachelor’s degree” and “graduate or professional degree” category. There is a negative internal net flow in all other categories, but the positive internal net flow dominates the trends. This analysis indicates that many residents already living in Alameda County are becoming more educated and thus leaving their old educational attainment categories.
 
-Overall, this analysis shows that the residents of Alameda County have become increasingly educated. This poses the question, however, of what happens to those residents with lower education levels. While many people are increasing their education level internally, this analysis also shows that residents with lower education levels are also leaving the county. This indicates that there are likely negative repercussions of upward educational mobility on less educated residents that are driving them to leave, such as gentrification. 
+Overall, this analysis shows that the residents of Alameda County have become increasingly educated. The college demographics may play a large role in this trend, as Alameda County has major college cities like Berkeley. This trend, however, poses the question of what happens to residents with lower education levels. While many people are increasing their education level internally, this analysis also shows that residents with lower education levels are also leaving the county. This indicates that there are likely negative repercussions of upward educational mobility on less educated residents that are driving them to leave, such as gentrification. 
